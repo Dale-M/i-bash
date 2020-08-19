@@ -47,6 +47,8 @@
 #  include "bashhist.h"
 #endif
 
+#include <libguile.h>
+
 extern int EOF_reached;
 extern int indirection_level;
 extern int posixly_correct;
@@ -63,6 +65,20 @@ extern sigset_t top_level_mask;
 
 static void send_pwd_to_eterm __P((void));
 static sighandler alrm_catcher __P((int));
+
+
+void execute_command_ (COMMAND *c)
+{
+  /* WORD_LIST *w; */
+
+  /* for (w = c->value.Simple->words; w; w = w->next) */
+  /*   { */
+  /*     printf ("  %s :-> %x\n", w->word->word, w->word->flags); */
+  /*   } */
+
+  execute_command (c);
+}
+
 
 /* Read and execute commands until EOF is reached.  This assumes that
    the input source has already been initialized. */
@@ -177,7 +193,88 @@ reader_loop ()
 		  free (ps0_string);
 		}
 
-	      execute_command (current_command);
+
+
+
+              if (current_command->type != cm_simple)
+                execute_command (current_command);
+
+              else
+                {
+                  /* Need to make a SCM array of strings. */
+
+                  WORD_LIST *words;
+
+                  SCM a = SCM_EOL;
+
+                  for (words = current_command->value.Simple->words;
+                       words;
+                       words = words->next)
+                    a = scm_cons (scm_from_locale_string (words->word->word),
+                                  a);
+
+                  a = scm_reverse (a);
+
+
+                  /* !!! Need to check return from scm_c_lookup. */
+                  SCM x = scm_call_1 
+                              (scm_variable_ref 
+                                   (scm_c_lookup ("BASH:process-command-line")),
+                               a);
+
+                  if (! scm_is_true (x))
+                    execute_command_ (current_command);
+
+                  else
+                    {
+                      for (;;)
+                        {
+                          SCM r = scm_call_0
+                                     (scm_variable_ref 
+                                         (scm_c_lookup ("BASH:next-command")));
+
+                          if (scm_is_false (r))
+                            break;
+                      
+                          /* Now we have to compose a new list of words in
+                           * current_command. */
+
+                          for (words = current_command->value.Simple->words;
+                               words;)
+                            {
+                              WORD_LIST *w = words->next;
+                              /* !!! I think there is some sub-structure
+                               *     to this which also needs free'ing. */
+                              free (words);
+                              words = w;
+                            }
+
+                          WORD_LIST **words;
+
+                          for (words = &current_command->value.Simple->words;
+                               ;
+                               )
+                            {
+                              if (scm_is_null (r))
+                                break;
+
+                              *words = (WORD_LIST*) malloc (sizeof (WORD_LIST));
+
+                              (*words)->next = NULL;
+                              (*words)->word = (WORD_DESC*) malloc (sizeof (WORD_DESC));
+                              (*words)->word->flags = 0;
+
+                              (*words)->word->word = scm_to_locale_string (scm_car (r));
+
+                              r = scm_cdr (r);
+
+                              words = &((*words)->next);
+                            }
+                              
+                          execute_command_ (current_command);
+                        }
+                    }
+                }
 
 	    exec_done:
 	      QUIT;

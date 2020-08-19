@@ -89,6 +89,8 @@ extern int get_tty_state __P((void));
 #  include <opennt/opennt.h>
 #endif
 
+#include <libguile.h>
+
 #if !defined (HAVE_GETPW_DECLS)
 extern struct passwd *getpwuid ();
 #endif /* !HAVE_GETPW_DECLS */
@@ -353,18 +355,13 @@ _cygwin32_check_tmp ()
 }
 #endif /* __CYGWIN__ */
 
-#if defined (NO_MAIN_ENV_ARG)
-/* systems without third argument to main() */
-int
-main (argc, argv)
+char **pass_env;
+
+void
+inner_main (closure, argc, argv)
+     void *closure;
      int argc;
      char **argv;
-#else /* !NO_MAIN_ENV_ARG */
-int
-main (argc, argv, env)
-     int argc;
-     char **argv, **env;
-#endif /* !NO_MAIN_ENV_ARG */
 {
   register int i;
   int code, old_errexit_flag;
@@ -378,6 +375,8 @@ main (argc, argv, env)
 
   env = environ;
 #endif /* __OPENNT */
+
+  char **env = pass_env;
 
   USE_VAR(argc);
   USE_VAR(argv);
@@ -517,6 +516,17 @@ main (argc, argv, env)
       arg_index++;
     }
   this_command_name = (char *)NULL;
+
+  /* Pull in the command-line processor call-out, so that the Guile
+     command-line processor is available in the Guile universe. */
+  scm_c_eval_string
+    ("(let  ((f  (getenv \"I_BASH_CALLOUT\"))) "
+       "(cond ((and f (access? f R_OK)) (load f)) "
+             "(else (let ((f (string-append (getenv \"HOME\") "
+                                           "\"/.bash_guile.scm\"))) "
+                     "(cond ((access? f R_OK) (load f)) "
+                           "(else (display \"iBash: ERROR: no call-out.\n\") "
+                                 "(exit 1)))))))");
 
   /* First, let the outside world know about our interactive status.
      A shell is interactive if the `-i' flag was given, or if all of
@@ -793,6 +803,24 @@ main (argc, argv, env)
   exit_shell (last_command_exit_value);
 }
 
+#if defined (NO_MAIN_ENV_ARG)
+/* systems without third argument to main() */
+int
+main (argc, argv)
+     int argc;
+     char **argv;
+#else /* !NO_MAIN_ENV_ARG */
+int
+main (argc, argv, env)
+     int argc;
+     char **argv, **env;
+#endif /* !NO_MAIN_ENV_ARG */
+{
+  pass_env = env;
+  scm_boot_guile (argc, argv, inner_main, 0);
+  return 0; /* Never reached. */
+}
+     
 static int
 parse_long_options (argv, arg_start, arg_end)
      char **argv;

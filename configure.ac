@@ -467,6 +467,9 @@ then
 	CFLAGS="$CFLAGS -Wno-parentheses -Wno-format-security"
 fi
 
+CFLAGS="${CFLAGS} $(pkg-config guile-2.2 --cflags)"
+LDFLAGS="${LDFLAGS} $(pkg-config guile-2.2 --libs)"
+
 dnl handle options that alter how bash is compiled and linked
 dnl these must come after the test for cc/gcc
 if test "$opt_profiling" = "yes"; then

@@ -1,0 +1,71 @@
+;;   This file is loaded by ibash-server.scm, and will return a function
+;;   which intelligently changes a 'cd' command to go directly to a
+;;   directory under a specially designated set of parent directories.
+
+
+;;   Copyright (C) 2020 Dale Mellor
+;;
+;;   This file is part of iBash, the intelligent Bourne Again SHell.
+;;
+;;   iBash is free software: you can redistribute it and/or modify
+;;   it under the terms of the GNU General Public License as published by
+;;   the Free Software Foundation, either version 3 of the License, or
+;;   (at your option) any later version.
+;;
+;;   iBash is distributed in the hope that it will be useful,
+;;   but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;   GNU General Public License for more details.
+;;
+;;   You should have received a copy of the GNU General Public License
+;;   along with iBash.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+(set! db-modules (cons '(db server cd) db-modules))
+
+
+(define-module (db server cd)
+  #:export (verbs))
+
+
+;; Return an s-exrpression defining a function which returns a list of
+;; (absolute) directory paths to search for some given directory.
+(define look-list-maker--s '(lambda ()
+                              (let ((home (getenv "HOME"))) 
+                                        (map (lambda (dir) 
+                                               (string-append home "/" dir))
+                                             '("projects" "documents" "")))))
+
+
+;; Return an s-expression which evaluates to a function which searches for
+;; the requested directory and then modifies the 'cd' command-line
+;; (/words/) to go directly to that directory, regardless of the current
+;; position in the file system.
+;;
+;; The return is a cons of remaining /words/ to process, and the modified
+;; 'cd' command-line prepended to the existing /stack/ of processed
+;; command-lines.
+(define (cd words stack)
+  (cond ((null? (cdr words))
+         '(lambda (w s) (cons '() (cons (list "cd") s))))
+        (else
+         `(lambda (words stack)
+            (if (access? (cadr words) R_OK)
+                (cons (cddr words) (cons (list "cd" (cadr words)) stack))
+                (let loop ((look ((primitive-eval ,look-list-maker--s))))
+                  (cond ((null? look)
+                         (cons (cddr words) (cons (list "cd" (cadr words))
+                                                  stack)))
+                        (else
+                         (let ((dir (string-append (car look) 
+                                                   "/" 
+                                                   (cadr words))))
+                           (if (access? dir R_OK)
+                               (cons (cddr words) (cons (list "cd" dir)
+                                                        stack))
+                               (loop (cdr look))))))))))))
+  
+
+;; Register the above processor with lines beginning with 'cd'.
+(define (verbs) (list (cons "cd" cd)))

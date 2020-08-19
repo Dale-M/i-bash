@@ -1,0 +1,31 @@
+;;   This file is loaded by ibash-server.scm, and will replace any
+;;   occurrences of the token 'ib' with the token 'i-bash' on the
+;;   command-line.
+
+
+;;   Copyright (C) 2020 Dale Mellor
+;;
+;;   This file is part of iBash, the intelligent Bourne Again SHell.
+;;
+;;   iBash is free software: you can redistribute it and/or modify
+;;   it under the terms of the GNU General Public License as published by
+;;   the Free Software Foundation, either version 3 of the License, or
+;;   (at your option) any later version.
+;;
+;;   iBash is distributed in the hope that it will be useful,
+;;   but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;   GNU General Public License for more details.
+;;
+;;   You should have received a copy of the GNU General Public License
+;;   along with iBash.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+(set! db-modules (cons '(db i-bash) db-modules))
+
+(define-module (db i-bash)
+  #:export (word-translators))
+
+(define (word-translators)
+  '((lambda (word) (if (string=? word "ib") "i-bash" word))))
